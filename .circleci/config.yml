@@ -55,7 +55,10 @@ jobs:
       - restore_cache:
           keys:
             - v1-dep-{{ .Branch }}-
-      - run: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
+      - run:
+          name: Download Dependencies
+          working_directory: ~/circleci-test
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
         # Teardown
       - store_artifacts:
           path: app/build/reports
