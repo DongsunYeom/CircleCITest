@@ -55,9 +55,7 @@ jobs:
       - restore_cache:
           keys:
             - v1-dep-{{ .Branch }}-
-      - run:
-          name: Run code quality checks
-          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
+      - run: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
         # Teardown
       - store_artifacts:
           path: app/build/reports
