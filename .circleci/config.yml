@@ -52,27 +52,38 @@ jobs:
   check_quality:
     <<: *android_config
     steps:
-      - attach_workspace:
-          at: ~/work
       - restore_cache:
           keys:
             - v1-dep-{{ .Branch }}-
-
       - run:
           name: Run code quality checks
           command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
+        # Teardown
       - store_artifacts:
           path: app/build/reports
           destination: reports
+      - store_artifacts:
+          name: Store test reports
+          path: app/build/reports/tests
+          destination: tests
+      - store_artifacts:
+          name: Store apk and other outputs
+          path: app/build/outputs
+          destination: outputs
+      - store_artifacts:
+          name: Store Lint report
+          path: app/build/reports/lint-results.html
+          destination: lint
+      - store_artifacts:
+          name: Store Jacoco report
+          path: app/build/reports/jacoco
+          destination: tests
 
   test_modules:
     <<: *android_config
     steps:
-      - attach_workspace:
-          at: ~/work
       - restore_cache:
-          keys:
-            - v1-dep-{{ .Branch }}-
+          key: dep-{{ .Branch }}
       - run:
           name: Run shared unit tests
           command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 shared:test
