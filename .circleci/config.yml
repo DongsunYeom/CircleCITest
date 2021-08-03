@@ -8,61 +8,118 @@
 # cases it should duplicate the execution of your original 1.0 config.
 # https://circleci.com/api/v1.1/project/github/volodia-chornenkyy/circleci-android-example/config-translation?branch=v2_migration
 version: 2
-jobs:
-  build:
+
+references:
+  android_config: &android_config
     working_directory: ~/circleci-test
     parallelism: 1
     shell: /bin/bash --login
     docker:
-    - image: circleci/android:api-24-alpha
+      - image: circleci/android:api-24-alpha
+
+jobs:
+  compile:
+    <<: *android_config
     steps:
-    # Machine Setup
-    #   If you break your build into multiple jobs with workflows, you will probably want to do the parts of this that are relevant in each
-    # The following `checkout` command checks out your code to your working directory. In 1.0 we did this implicitly. In 2.0 you can choose where in the course of a job your code should be checked out.
-    - checkout
-    # Dependencies
-    #   This would typically go in either a build or a build-and-test job when using workflows
-    # Restore the dependency cache
-    - restore_cache:
-        keys:
-        # This branch if available
-        - v1-dep-{{ .Branch }}-
-    # Save dependency cache
-    - save_cache:
-        key: v1-dep-{{ .Branch }}-{{ epoch }}
-        paths:
-        # This is a broad list of cache paths to include many possible development environments
-        # You can probably delete some of these entries
-        - vendor/bundle
-        - ~/virtualenvs
-        - ~/.m2
-        - ~/.ivy2
-        - ~/.bundle
-        - ~/.go_workspace
-        - ~/.gradle
-        - ~/.cache/bower
-        # These cache paths were specified in the 1.0 config
-        - ~/.android
-        - ~/android
-    # Test
-    #   This would typically be a build job when using workflows, possibly combined with build
-    # This is based on your 1.0 configuration file or project settings
-    - run: ./gradlew build
-    - run: ./gradlew jacocoTestReport
-    # Teardown
-    - store_artifacts:
-        name: Store test reports
-        path: app/build/reports/tests
-        destination: tests
-    - store_artifacts:
-        name: Store apk and other outputs
-        path: app/build/outputs
-        destination: outputs
-    - store_artifacts:
-        name: Store Lint report
-        path: app/build/reports/lint-results.html
-        destination: lint
-    - store_artifacts:
-        name: Store Jacoco report
-        path: app/build/reports/jacoco
-        destination: tests
+      - checkout
+      - run:
+          name: Generate combined build.gradle file for cache key
+          command: cat build.gradle */build.gradle .circleci/gradle.properties > deps.txt
+      - restore_cache:
+          keys:
+            # This branch if available
+            - v1-dep-{{ .Branch }}-
+      - run:
+          name: Download dependencies
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 androidDependencies
+      - run:
+          name: Copy gradle config
+          command: cp .circleci/gradle.properties ~/.gradle/gradle.properties
+      - save_cache:
+            key: v1-dep-{{ .Branch }}-{{ epoch }}
+            paths:
+            # This is a broad list of cache paths to include many possible development environments
+            # You can probably delete some of these entries
+            - vendor/bundle
+            - ~/virtualenvs
+            - ~/.m2
+            - ~/.ivy2
+            - ~/.bundle
+            - ~/.go_workspace
+            - ~/.gradle
+            - ~/.cache/bower
+            # These cache paths were specified in the 1.0 config
+            - ~/.android
+            - ~/android
+
+      - run: ./gradlew build
+      - run: ./gradlew jacocoTestReport
+
+  check_quality:
+    <<: *android_config
+    steps:
+      - attach_workspace:
+          at: ~/work
+      - restore_cache:
+          key: deps-{{ checksum "deps.txt" }}
+
+      - run:
+          name: Run code quality checks
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
+      - store_artifacts:
+          path: collect_app/build/reports
+          destination: reports
+
+  test_modules:
+    <<: *android_config
+    steps:
+      - attach_workspace:
+          at: ~/work
+      - restore_cache:
+          key: deps-{{ checksum "deps.txt" }}
+
+      - run:
+          name: Run shared unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 shared:test
+      - run:
+          name: Run androidshared unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 androidshared:testDebug
+      - run:
+          name: Run formtest unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 formstest:test
+      - run:
+          name: Run async unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 async:testDebug
+      - run:
+          name: Run strings unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 strings:testDebug
+      - run:
+          name: Run audioclips unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 audioclips:testDebug
+      - run:
+          name: Run audiorecorder unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 audiorecorder:testDebug
+      - run:
+          name: Run projects unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 projects:testDebug
+      - run:
+          name: Run location unit tests
+          command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 location:testDebug
+
+      - store_artifacts:
+          path: collect_app/build/reports
+          destination: reports
+      - store_test_results:
+          path: collect_app/build/test-results
+
+workflows:
+  version: 2
+  workflow:
+    jobs:
+      - compile
+      - check_quality:
+          requires:
+            - compile
+      - test_modules:
+          requires:
+            - compile
