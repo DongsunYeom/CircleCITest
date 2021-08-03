@@ -22,9 +22,6 @@ jobs:
     <<: *android_config
     steps:
       - checkout
-      - run:
-          name: Generate combined build.gradle file for cache key
-          command: cat build.gradle */build.gradle .circleci/gradle.properties > deps.txt
       - restore_cache:
           keys:
             # This branch if available
@@ -32,9 +29,6 @@ jobs:
       - run:
           name: Download dependencies
           command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 androidDependencies
-      - run:
-          name: Copy gradle config
-          command: cp .circleci/gradle.properties ~/.gradle/gradle.properties
       - save_cache:
             key: v1-dep-{{ .Branch }}-{{ epoch }}
             paths:
@@ -67,7 +61,7 @@ jobs:
           name: Run code quality checks
           command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 checkCode
       - store_artifacts:
-          path: collect_app/build/reports
+          path: app/build/reports
           destination: reports
 
   test_modules:
@@ -107,10 +101,10 @@ jobs:
           command: ./gradlew -PdisablePreDex --no-daemon --max-workers=2 location:testDebug
 
       - store_artifacts:
-          path: collect_app/build/reports
+          path: app/build/reports
           destination: reports
       - store_test_results:
-          path: collect_app/build/test-results
+          path: app/build/test-results
 
 workflows:
   version: 2
